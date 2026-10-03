@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="icon" href="data:,">
+    <title>{% block title %}Face Recognition Attendance{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at top right, #1e293b, #0f172a);
+            background-attachment: fixed;
+            color: #f8fafc;
+            min-height: 100vh;
+        }
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            transition: box-shadow 0.3s ease;
+        }
+        .glass-panel:hover { box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); }
+        .btn-custom {
+            background-color: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 20px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+        .btn-custom:hover:not(:disabled) {
+            background-color: var(--accent-hover);
+            transform: scale(1.02);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+        }
+        .btn-custom:disabled { opacity: 0.7; }
+        .page-title {
+            font-weight: 700;
+            background: linear-gradient(to right, #60a5fa, #3b82f6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .panel-title { font-weight: 700; color: #93c5fd; }
+        .section-label { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: #94a3b8; }
+        .table { --bs-table-bg: transparent; color: #e2e8f0; }
+        .table-hover tbody tr:hover { --bs-table-hover-bg: rgba(255, 255, 255, 0.05); }
+        .scroll-table { max-height: 420px; overflow-y: auto; }
+        .row-low td { background-color: rgba(239, 68, 68, 0.10) !important; }
+        .navbar-glass { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(10px); border-bottom: 1px solid var(--glass-border); }
+        .stat-card { background: rgba(15, 23, 42, 0.6); border: 1px solid var(--glass-border); border-radius: 14px; padding: 18px; height: 100%; }
+        .stat-card .value { font-size: 1.8rem; font-weight: 700; }
+        .flash-text { white-space: pre-line; }
+        .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1080; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    {% if session.get('role') %}
+    <nav class="navbar navbar-expand-lg navbar-glass sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="{{ url_for('login_page') }}">Face Attendance</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav"
+                    aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav me-auto">
+                    {% for endpoint, label in nav_links %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == endpoint %}active fw-semibold{% endif %}" href="{{ url_for(endpoint) }}">{{ label }}</a>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <span class="navbar-text small me-3">{{ session.get('display_name', '') }}</span>
+                <a href="{{ url_for('change_password') }}" class="btn btn-sm btn-outline-light me-2">Change Password</a>
+                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-danger">Logout</a>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
+    <div class="container py-4">
+        {% if session.get('default_password') %}
+        <div class="alert alert-warning">
+            You are still using the default admin password. <a href="{{ url_for('change_password') }}" class="alert-link">Change it now</a>.
+        </div>
+        {% endif %}
+        {% block flashes %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category if category in ('success', 'danger', 'warning', 'info') else 'info' }} alert-dismissible fade show" role="alert">
+                <span class="flash-text">{{ message }}</span>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+        {% endwith %}
+        {% endblock %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast-container">
+        <div id="statusToast" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body" id="toastMessage">Action started...</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
+        const PROCESS_STATUS_URL = {{ url_for('api_process_status')|tojson }};
+
+        function showToast(message, ok = true) {
+            const el = document.getElementById('statusToast');
+            el.classList.remove('text-bg-primary', 'text-bg-success', 'text-bg-danger');
+            el.classList.add(ok ? 'text-bg-success' : 'text-bg-danger');
+            document.getElementById('toastMessage').textContent = message;
+            bootstrap.Toast.getOrCreateInstance(el).show();
+        }
+
+        async function postJSON(url, data) {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-Token': CSRF_TOKEN},
+                body: JSON.stringify(data || {})
+            });
+            let body = {};
+            try { body = await res.json(); } catch (e) { /* not JSON */ }
+            if (!body.status) {
+                body = {status: res.ok ? 'success' : 'error', message: body.message || `Request failed (${res.status})`};
+            }
+            return body;
+        }
+
+        async function runScript(url, btn, data) {
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starting...';
+            btn.disabled = true;
+            let result = null;
+            try {
+                result = await postJSON(url, data);
+                showToast(result.message, result.status === 'success');
+            } catch (e) {
+                showToast('Could not reach the server.', false);
+            } finally {
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    refreshProcessStatus();
+                }, 1500);
+            }
+            return result;
+        }
+
+        function startScanner(btn) {
+            const data = {
+                duration: document.getElementById('scanDuration').value,
+                late_after: document.getElementById('scanLateAfter').value
+            };
+            const subject = document.getElementById('scanSubject');
+            if (subject) data.subject = subject.value;
+            runScript(btn.dataset.url, btn, data);
+        }
+
+        // Build "<label><badge>" with textContent so user-entered values are
+        // never parsed as HTML.
+        function setEditTitle(titleId, label, value) {
+            const title = document.getElementById(titleId);
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-warning text-dark fs-6';
+            badge.textContent = value;
+            title.textContent = label;
+            title.appendChild(badge);
+        }
+
+        function filterRows(input, selector) {
+            const query = input.value.trim().toLowerCase();
+            document.querySelectorAll(selector).forEach(row => {
+                row.style.display = row.dataset.search.includes(query) ? '' : 'none';
+            });
+        }
+
+        async function refreshProcessStatus() {
+            const box = document.getElementById('processStatus');
+            if (!box) return;
+            try {
+                const res = await fetch(PROCESS_STATUS_URL, {headers: {'Accept': 'application/json'}});
+                if (!res.ok) return;
+                const s = await res.json();
+                const parts = [];
+                if (s.register) parts.push('Face registration window is open');
+                if (s.scanner) parts.push('Attendance scanner running' + (s.scanner_subject ? ` (${s.scanner_subject})` : ''));
+                if (s.extract) parts.push('Processing faces...');
+                if (s.evaluate) parts.push('Accuracy evaluation running...');
+                box.textContent = parts.length ? parts.join(' · ') : 'Camera is free.';
+                box.className = 'small mb-3 ' + (parts.length ? 'text-warning' : 'text-success');
+                document.dispatchEvent(new CustomEvent('process-status', {detail: s}));
+            } catch (e) { /* server restarting */ }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (document.getElementById('processStatus')) {
+                refreshProcessStatus();
+                setInterval(refreshProcessStatus, 3000);
+            }
+        });
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

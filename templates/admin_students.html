@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% block title %}Students - Face Recognition Attendance{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="display-6 page-title mb-1">Students</h1>
+    <p class="text-secondary mb-0">Add, edit or import students. Face photos are captured from the Dashboard with <em>Register New Face</em>.</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="glass-panel mb-4" id="student_panel">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h5 panel-title mb-0" id="student_form_title">Add Student</h2>
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="resetStudentForm()">+ Add New</button>
+            </div>
+            <form action="{{ url_for('manage_student') }}" method="POST" class="row g-3" id="student_form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="add" id="student_action">
+                <div class="col-12">
+                    <label class="form-label text-secondary mb-1" for="student_reg_no_input">Register Number</label>
+                    <input type="text" id="student_reg_no_input" name="register_number" class="form-control bg-dark text-light border-secondary" placeholder="e.g. 21CS001" maxlength="50" required>
+                </div>
+                <div class="col-12">
+                    <label class="form-label text-secondary mb-1" for="student_name_input">Name</label>
+                    <input type="text" id="student_name_input" name="name" class="form-control bg-dark text-light border-secondary" placeholder="Name" maxlength="100" required>
+                </div>
+                <div class="col-12">
+                    <label class="form-label text-secondary mb-1" for="student_password_input">Password</label>
+                    <input type="password" id="student_password_input" name="password" class="form-control bg-dark text-light border-secondary" placeholder="At least {{ min_password }} characters" minlength="{{ min_password }}" autocomplete="new-password" required>
+                </div>
+                <div class="col-12 d-flex gap-2">
+                    <button type="submit" id="student_save_btn" class="btn btn-success w-50">Save Student</button>
+                    <button type="button" onclick="resetStudentForm()" class="btn btn-outline-secondary w-50">Clear / Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="glass-panel">
+            <h2 class="h5 panel-title mb-2">Bulk Import (CSV)</h2>
+            <p class="small text-secondary">
+                Header row with <code>register_number</code>, <code>name</code>, <code>password</code>
+                (required for new students) and optional <code>subjects</code> separated by <code>;</code>.
+                Existing students are updated; a blank password keeps theirs.
+            </p>
+            <form action="{{ url_for('import_students') }}" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="file" name="csv_file" accept=".csv,text/csv" class="form-control bg-dark text-light border-secondary mb-2" required>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary w-50">Import</button>
+                    <a href="{{ url_for('sample_students_csv') }}" class="btn btn-outline-secondary w-50">Sample CSV</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="glass-panel">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <h2 class="h5 panel-title mb-0">All Students ({{ students|length }})</h2>
+                <input type="search" class="form-control form-control-sm bg-dark text-light border-secondary" style="max-width: 240px;"
+                       placeholder="Search..." oninput="filterRows(this, '#studentTable tbody tr[data-search]')">
+            </div>
+            <div class="table-responsive" style="max-height: 640px; overflow-y: auto;">
+                <table class="table table-hover table-borderless align-middle mb-0" id="studentTable">
+                    <thead class="border-bottom border-secondary">
+                        <tr>
+                            <th>Register No</th>
+                            <th>Name</th>
+                            <th>Face Photos</th>
+                            <th>Subjects</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students %}
+                        {% set photos = photo_counts.get(student.register_number, 0) %}
+                        <tr data-search="{{ (student.register_number ~ ' ' ~ student.name)|lower }}">
+                            <td>{{ student.register_number }}</td>
+                            <td>{{ student.name }}</td>
+                            <td>
+                                {% if photos >= photos_target %}<span class="badge bg-success">{{ photos }} photos</span>
+                                {% elif photos %}<span class="badge bg-warning text-dark" title="Fewer than {{ photos_target }} photos">{{ photos }} photo{{ 's' if photos != 1 }}</span>
+                                {% else %}<span class="badge bg-secondary">Not registered</span>{% endif %}
+                            </td>
+                            <td class="small">{{ enrolled.get(student.register_number, [])|join(', ') or '—' }}</td>
+                            <td class="text-end text-nowrap">
+                                <button type="button" class="btn btn-sm btn-outline-warning me-1"
+                                        data-reg="{{ student.register_number }}"
+                                        data-name="{{ student.name }}"
+                                        onclick="editStudent(this)">Edit</button>
+                                <form action="{{ url_for('manage_student') }}" method="POST" class="d-inline" data-name="{{ student.name }}"
+                                      onsubmit="return confirm('Delete student ' + this.dataset.name + '? Their attendance history and face photos are deleted too.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="register_number" value="{{ student.register_number }}">
+                                    <input type="hidden" name="action" value="delete">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center text-secondary py-4">No students yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function editStudent(btn) {
+        document.getElementById('student_action').value = 'edit';
+        const regInput = document.getElementById('student_reg_no_input');
+        regInput.value = btn.dataset.reg;
+        regInput.readOnly = true;
+        document.getElementById('student_name_input').value = btn.dataset.name;
+        const password = document.getElementById('student_password_input');
+        password.value = '';
+        password.required = false;
+        password.placeholder = 'Leave blank to keep the current password';
+        setEditTitle('student_form_title', 'Edit Student ', btn.dataset.reg);
+        document.getElementById('student_save_btn').textContent = 'Update Student';
+        document.getElementById('student_panel').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function resetStudentForm() {
+        document.getElementById('student_action').value = 'add';
+        const regInput = document.getElementById('student_reg_no_input');
+        regInput.value = '';
+        regInput.readOnly = false;
+        document.getElementById('student_name_input').value = '';
+        const password = document.getElementById('student_password_input');
+        password.value = '';
+        password.required = true;
+        password.placeholder = 'At least {{ min_password }} characters';
+        document.getElementById('student_form_title').textContent = 'Add Student';
+        document.getElementById('student_save_btn').textContent = 'Save Student';
+    }
+</script>
+{% endblock %}

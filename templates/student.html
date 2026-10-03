@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import status_badge, percent_badge %}
+{% block title %}My Attendance - Face Recognition Attendance{% endblock %}
+{% block content %}
+{% set low_subjects = summary|selectattr('low')|map(attribute='subject')|list %}
+{% set overall_low = overall.percent is not none and overall.percent < low_percent %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <h1 class="display-6 page-title mb-1">Welcome, {{ student_name }}</h1>
+        <p class="text-secondary mb-0">Register No: {{ reg_no }}</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-success" href="{{ url_for('export', fmt='xlsx', **export) }}">Download Excel</a>
+        <a class="btn btn-danger" href="{{ url_for('export', fmt='pdf', **export) }}">Download PDF</a>
+    </div>
+</div>
+
+<div class="glass-panel mb-4">
+    <form action="{{ url_for('student_dashboard') }}" method="GET" class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label text-secondary mb-1" for="filterSubject">Subject</label>
+            <select name="subject" id="filterSubject" class="form-select bg-dark text-light border-secondary">
+                <option value="">All subjects</option>
+                {% for sub in subjects %}
+                <option value="{{ sub }}" {% if chosen == sub %}selected{% endif %}>{{ sub }}{% if professors.get(sub) %} (Prof. {{ professors.get(sub) }}){% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label text-secondary mb-1" for="filterStart">From</label>
+            <input type="date" name="start" id="filterStart" value="{{ start }}" class="form-control bg-dark text-light border-secondary">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label text-secondary mb-1" for="filterEnd">To</label>
+            <input type="date" name="end" id="filterEnd" value="{{ end }}" class="form-control bg-dark text-light border-secondary">
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-primary w-100">View</button>
+            <a href="{{ url_for('student_dashboard') }}" class="btn btn-outline-secondary">Reset</a>
+        </div>
+    </form>
+</div>
+
+{% if low_subjects %}
+<div class="alert alert-danger">Your attendance is below {{ low_percent }}% in: {{ low_subjects|join(', ') }}.</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="stat-card">
+            <div class="section-label">Overall attendance</div>
+            <div class="value {{ 'text-danger' if overall_low else ('text-success' if overall.percent is not none) }}">{{ overall.percent|pct }}</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="stat-card"><div class="section-label">Classes held</div><div class="value">{{ overall.held }}</div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="stat-card"><div class="section-label">Attended</div><div class="value">{{ overall.attended }}</div><div class="small text-secondary">including late</div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="stat-card"><div class="section-label">Late</div><div class="value">{{ overall.late }}</div></div>
+    </div>
+</div>
+
+<div class="glass-panel mb-4">
+    <h2 class="h5 panel-title mb-3">Subject-wise Attendance</h2>
+    <div class="table-responsive">
+        <table class="table table-hover table-borderless align-middle mb-0">
+            <thead class="border-bottom border-secondary">
+                <tr>
+                    <th>Subject</th>
+                    <th>Professor</th>
+                    <th class="text-center">Held</th>
+                    <th class="text-center">Present</th>
+                    <th class="text-center">Late</th>
+                    <th class="text-center">Absent</th>
+                    <th class="text-end">Attendance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in summary %}
+                <tr class="{{ 'row-low' if r.low }}">
+                    <td>{{ r.subject }}</td>
+                    <td>{{ professors.get(r.subject) or '—' }}</td>
+                    <td class="text-center">{{ r.held }}</td>
+                    <td class="text-center">{{ r.present }}</td>
+                    <td class="text-center">{{ r.late }}</td>
+                    <td class="text-center">{{ r.absent }}</td>
+                    <td class="text-end">{{ percent_badge(r.percent, r.low) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center text-secondary py-4">No subjects yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="glass-panel">
+    <h2 class="h5 panel-title mb-3">Attendance History</h2>
+    <div class="table-responsive scroll-table">
+        <table class="table table-hover table-borderless align-middle mb-0">
+            <thead class="border-bottom border-secondary">
+                <tr>
+                    <th>Date</th>
+                    <th>Subject</th>
+                    <th>Status</th>
+                    <th>Time Marked</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for h in history %}
+                <tr>
+                    <td class="text-nowrap">{{ h.date }}</td>
+                    <td>{{ h.subject }}</td>
+                    <td>{{ status_badge(h.status) }}</td>
+                    <td>{{ h.time or '—' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-center text-secondary py-4">No classes recorded for these filters.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

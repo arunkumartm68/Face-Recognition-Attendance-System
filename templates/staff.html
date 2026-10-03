@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Staff Dashboard - Face Recognition Attendance{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="display-5 page-title mb-1">{{ subject }} Staff Dashboard</h1>
+    <p class="lead text-secondary mb-0">{% if professor_name %}Faculty: <strong class="text-light">{{ professor_name }}</strong> &bull; {% endif %}Manage attendance records for {{ subject }}</p>
+</div>
+
+{% if models_missing %}
+<div class="alert alert-danger">The face recognition model files are missing - ask the administrator to run <code>python download_models.py</code>.</div>
+{% endif %}
+
+<div class="row g-4">
+    <!-- Control Panel -->
+    <div class="col-lg-4">
+        <div class="glass-panel h-100">
+            <h2 class="h4 panel-title mb-3">Control Panel</h2>
+            <div id="processStatus" class="small text-secondary mb-3">Checking camera status...</div>
+            <p class="small text-secondary mb-3">Start the camera sensor to log presence for {{ subject }} automatically.</p>
+            {% include '_session_inputs.html' %}
+            <button class="btn-custom mb-2" data-url="{{ url_for('run_attendance') }}" onclick="startScanner(this)">Start Attendance Scanner</button>
+            <a href="{{ url_for('staff_reports') }}" class="btn btn-outline-info w-100">Attendance % report &amp; export</a>
+        </div>
+    </div>
+
+    <!-- Attendance Viewer -->
+    <div class="col-lg-8">
+        <div class="glass-panel h-100">
+            <h2 class="h4 panel-title mb-3">Attendance Log - {{ subject }}</h2>
+            <form action="{{ url_for('staff_dashboard') }}" method="GET" class="d-flex gap-2 mb-3">
+                <input type="date" class="form-control bg-dark text-light border-secondary" name="date" required value="{{ date }}" aria-label="Date">
+                <button type="submit" class="btn btn-outline-primary px-4">View</button>
+            </form>
+            {% if not is_today %}
+            <div class="alert alert-secondary py-2 small">Past days are read-only - only today's attendance can be changed.</div>
+            {% endif %}
+            {% if open_to_all %}
+            <div class="alert alert-info py-2 small">No students are assigned to {{ subject }} yet, so every student is listed. The administrator can assign students on the Subjects page.</div>
+            {% endif %}
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <span class="badge bg-success">Present: {{ counts['Present'] }}</span>
+                <span class="badge bg-warning text-dark">Late: {{ counts['Late'] }}</span>
+                <span class="badge bg-danger">Absent: {{ counts['Absent'] }}</span>
+            </div>
+            {% with editable=is_today, action_url=url_for('staff_set_attendance') %}
+                {% include '_attendance_table.html' %}
+            {% endwith %}
+        </div>
+    </div>
+</div>
+
+<div class="glass-panel mt-4">
+    <h2 class="h4 panel-title mb-3">Recent Class Sessions</h2>
+    {% with show_subject=False %}{% include '_sessions_table.html' %}{% endwith %}
+</div>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Change Log - Face Recognition Attendance{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="display-6 page-title mb-1">Change Log</h1>
+    <p class="text-secondary mb-0">Every manual Present / Late / Absent change and every deleted student or subject (latest 500).</p>
+</div>
+
+<div class="glass-panel">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h2 class="h5 panel-title mb-0">{{ entries|length }} entr{{ 'y' if entries|length == 1 else 'ies' }}</h2>
+        <input type="search" class="form-control form-control-sm bg-dark text-light border-secondary" style="max-width: 260px;"
+               placeholder="Search..." oninput="filterRows(this, '#logTable tbody tr[data-search]')">
+    </div>
+    <div class="table-responsive" style="max-height: 720px; overflow-y: auto;">
+        <table class="table table-hover table-borderless align-middle mb-0 small" id="logTable">
+            <thead class="border-bottom border-secondary">
+                <tr>
+                    <th>When</th>
+                    <th>Changed by</th>
+                    <th>Action</th>
+                    <th>Student</th>
+                    <th>Subject</th>
+                    <th>Class date</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in entries %}
+                <tr data-search="{{ [e.actor, e.action, e.register_number, e.student_name, e.subject, e.date, e.details]|map('default', '', true)|join(' ')|lower }}">
+                    <td class="text-nowrap">{{ e.timestamp|ts }}</td>
+                    <td>{{ e.actor }} <span class="text-secondary">({{ e.actor_role }})</span></td>
+                    <td>
+                        {% set badge = {'Marked Present': 'bg-success', 'Marked Late': 'bg-warning text-dark', 'Marked Absent': 'bg-danger'}.get(e.action, 'bg-secondary') %}
+                        <span class="badge {{ badge }}">{{ e.action }}</span>
+                    </td>
+                    <td>
+                        {% if e.register_number %}{{ e.student_name or '' }} <span class="text-secondary">{{ e.register_number }}</span>{% else %}—{% endif %}
+                    </td>
+                    <td>{{ e.subject or '—' }}</td>
+                    <td class="text-nowrap">{{ e.date or '—' }}</td>
+                    <td>{{ e.details or '' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center text-secondary py-4">No changes recorded yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

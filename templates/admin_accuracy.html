@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% block title %}Recognition Accuracy - Face Recognition Attendance{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1 class="display-6 page-title mb-1">Recognition Accuracy</h1>
+        <p class="text-secondary mb-0">Measured on the registered face photos with <code>evaluate_accuracy.py</code>.</p>
+    </div>
+    <div class="text-end">
+        <button class="btn btn-primary" onclick="startEvaluation(this)" {% if models_missing %}disabled{% endif %}>Run Evaluation</button>
+        <div id="processStatus" class="small text-secondary mt-2">Checking status...</div>
+    </div>
+</div>
+
+{% if models_missing %}
+<div class="alert alert-danger">The face recognition model files are missing. Run <code>python download_models.py</code> first.</div>
+{% endif %}
+
+{% if not evaluation %}
+<div class="glass-panel">
+    <p class="mb-0">No evaluation has been run yet. Register at least two students ({{ photos_target }} photos each), then click
+        <strong>Run Evaluation</strong> or run <code>python evaluate_accuracy.py</code>.</p>
+</div>
+{% elif evaluation.error %}
+<div class="alert alert-warning">Last evaluation ({{ evaluation.evaluated_at|ts }}): {{ evaluation.error }}</div>
+{% else %}
+{% set ds = evaluation.dataset %}
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="stat-card"><div class="section-label">Students</div><div class="value">{{ ds.students }}</div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="stat-card">
+            <div class="section-label">Photos used</div>
+            <div class="value">{{ ds.faces_detected }}<span class="fs-6 text-secondary"> / {{ ds.photos }}</span></div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="stat-card"><div class="section-label">Threshold in use</div><div class="value">{{ '%.2f'|format(threshold) }}</div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="stat-card">
+            <div class="section-label">Best measured threshold</div>
+            <div class="value">{{ '%.2f'|format(evaluation.recommended_threshold) if evaluation.recommended_threshold is not none else 'n/a' }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="glass-panel mb-4">
+    <h2 class="h5 panel-title mb-1">Accuracy across distance thresholds</h2>
+    <p class="small text-secondary">Evaluated {{ evaluation.evaluated_at|ts }} · {{ ds.genuine_trials }} genuine and {{ ds.impostor_trials }} impostor trials</p>
+    <div class="table-responsive">
+        <table class="table table-hover table-borderless align-middle mb-0">
+            <thead class="border-bottom border-secondary">
+                <tr>
+                    <th>Threshold</th>
+                    <th>Correct matches</th>
+                    <th>False rejects</th>
+                    <th>Wrong person</th>
+                    <th>False accepts</th>
+                    <th>Accuracy</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in evaluation.thresholds %}
+                {% set in_use = (row.threshold - threshold)|abs < 0.000001 %}
+                {% set best = evaluation.recommended_threshold is not none and (row.threshold - evaluation.recommended_threshold)|abs < 0.000001 %}
+                <tr class="{{ 'table-active' if in_use }}">
+                    <td>
+                        {{ '%.2f'|format(row.threshold) }}
+                        {% if in_use %}<span class="badge bg-primary ms-1">in use</span>{% endif %}
+                        {% if best %}<span class="badge bg-success ms-1">best</span>{% endif %}
+                    </td>
+                    <td>{{ row.tar|pct }} <span class="small text-secondary">({{ row.correct_matches }}/{{ row.genuine_trials }})</span></td>
+                    <td>{{ row.frr|pct }} <span class="small text-secondary">({{ row.false_rejects }})</span></td>
+                    <td>{{ row.wrong_rate|pct }} <span class="small text-secondary">({{ row.wrong_person }})</span></td>
+                    <td>{{ row.far|pct }} <span class="small text-secondary">({{ row.false_accepts }}/{{ row.impostor_trials }})</span></td>
+                    <td class="fw-semibold">{{ row.accuracy|pct }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="glass-panel h-100">
+            <h2 class="h5 panel-title mb-3">Processing time per stage</h2>
+            {% set lat = evaluation.latency_ms %}
+            <table class="table table-borderless table-sm mb-0">
+                <tbody>
+                    <tr><td>BGR-to-RGB conversion</td><td class="text-end">{{ '%.2f'|format(lat.color_conversion) }} ms</td></tr>
+                    <tr><td>Dlib HOG face detection</td><td class="text-end">{{ '%.2f'|format(lat.detection) }} ms</td></tr>
+                    <tr><td>68-landmark localisation</td><td class="text-end">{{ '%.2f'|format(lat.landmarks) }} ms</td></tr>
+                    <tr><td>ResNet 128D descriptor</td><td class="text-end">{{ '%.2f'|format(lat.descriptor) }} ms</td></tr>
+                    <tr><td>Distance matching against all profiles</td><td class="text-end">{{ '%.3f'|format(lat.matching) }} ms</td></tr>
+                    <tr class="border-top border-secondary fw-semibold"><td>Total per frame (one face)</td><td class="text-end">{{ '%.1f'|format(lat.per_frame_total) }} ms (~{{ '%.1f'|format(lat.fps_estimate) }} FPS)</td></tr>
+                    <tr><td>SQLite attendance write (once per student)</td><td class="text-end">{{ '%.2f'|format(lat.sqlite_write) }} ms</td></tr>
+                </tbody>
+            </table>
+            <p class="small text-secondary mt-2 mb-0">Timed on 640×480 frames on this computer.</p>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="glass-panel h-100">
+            <h2 class="h5 panel-title mb-3">How it is measured</h2>
+            <ul class="small mb-2">
+                <li><strong>Genuine trials</strong>: each photo is matched against all profiles, with that photo left out of its owner's profile. A correct match is the right student under the threshold.</li>
+                <li><strong>Impostor trials</strong>: each photo is matched with its owner's profile removed - any match is a false accept.</li>
+                <li><strong>Accuracy</strong> = (correct matches + correctly rejected impostors) / all trials.</li>
+            </ul>
+            {% if evaluation.notes %}
+            <div class="section-label mb-1">Notes</div>
+            <ul class="small text-secondary mb-0">
+                {% for note in evaluation.notes %}<li>{{ note }}</li>{% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Reload the page with fresh results when a running evaluation finishes.
+    let evaluationWasRunning = {{ 'true' if running else 'false' }};
+
+    async function startEvaluation(btn) {
+        const result = await runScript({{ url_for('run_evaluation')|tojson }}, btn);
+        // A small dataset can finish before the next status poll, so count
+        // a successful start as "running" straight away.
+        if (result && result.status === 'success') evaluationWasRunning = true;
+    }
+
+    document.addEventListener('process-status', (e) => {
+        if (evaluationWasRunning && !e.detail.evaluate) location.reload();
+        evaluationWasRunning = e.detail.evaluate;
+    });
+</script>
+{% endblock %}

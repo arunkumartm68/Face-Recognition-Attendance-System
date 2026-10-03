@@ -1,0 +1,41 @@
+{# Expects: rows, subject, date, editable, action_url #}
+{% from '_macros.html' import status_badge %}
+<div class="table-responsive scroll-table">
+    <table class="table table-hover table-borderless align-middle mb-0">
+        <thead class="border-bottom border-secondary">
+            <tr>
+                <th scope="col">Register No</th>
+                <th scope="col">Name</th>
+                <th scope="col">Status</th>
+                <th scope="col">Time</th>
+                {% if editable %}<th scope="col" class="text-end">Action</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in rows %}
+            <tr>
+                <td>{{ item.reg_no }}</td>
+                <td>{{ item.name }}</td>
+                <td>{{ status_badge(item.status) }}</td>
+                <td>{{ item.time }}</td>
+                {% if editable %}
+                <td class="text-end text-nowrap">
+                    {% for target in ['Present', 'Late', 'Absent'] if target != item.status %}
+                    <form action="{{ action_url }}" method="POST" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="register_number" value="{{ item.reg_no }}">
+                        <input type="hidden" name="subject" value="{{ subject }}">
+                        <input type="hidden" name="date" value="{{ date }}">
+                        <input type="hidden" name="status" value="{{ target }}">
+                        <button type="submit" class="btn btn-sm {{ {'Present': 'btn-success', 'Late': 'btn-outline-warning', 'Absent': 'btn-outline-danger'}[target] }}">Mark {{ target }}</button>
+                    </form>
+                    {% endfor %}
+                </td>
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-center text-secondary py-4">No students yet - add them on the Students page.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

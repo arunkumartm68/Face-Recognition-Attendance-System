@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+
+# Local data - student records, face photos and secrets never belong in git
+attendance.db
+attendance.db-journal
+data/data_faces_from_camera/*
+!data/data_faces_from_camera/.gitkeep
+data/features_all.csv
+data/features_meta.json
+data/registration_latency.json
+data/evaluation_results.json
+data/.secret_key
+*.tmp
+*.part
+
+# Downloaded dlib models (python download_models.py)
+data/data_dlib/*.dat
+
+# OS / editor files
+~$*
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+{% block title %}Admin Dashboard - Face Recognition Attendance{% endblock %}
+{% block head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="display-5 page-title mb-1">Admin Dashboard</h1>
+    <p class="lead text-secondary mb-0">Run the camera tools and manage attendance</p>
+</div>
+
+{% if models_missing %}
+<div class="alert alert-danger">
+    The face recognition model files are missing ({{ models_missing|join(', ') }}). Run <code>python download_models.py</code> in the project folder.
+</div>
+{% endif %}
+
+<div class="row g-4">
+    <!-- Control Panel -->
+    <div class="col-lg-4">
+        <div class="glass-panel h-100">
+            <h2 class="h4 panel-title mb-3">Control Panel</h2>
+            <div id="processStatus" class="small text-secondary mb-3">Checking camera status...</div>
+
+            <div class="section-label mb-2">Face registration</div>
+            <button class="btn-custom" onclick="runScript('{{ url_for('run_register') }}', this)">1. Register New Face</button>
+            <button class="btn-custom" onclick="runScript('{{ url_for('run_extract') }}', this)">2. Process Faces (Extract)</button>
+
+            <div class="section-label mt-2 mb-2">Attendance scanner</div>
+            <label class="form-label text-secondary mb-1 small" for="scanSubject">Subject</label>
+            <select id="scanSubject" class="form-select bg-dark text-light border-secondary mb-2">
+                <option value="{{ general_subject }}">{{ general_subject }}</option>
+                {% for staff in staffs %}
+                <option value="{{ staff.subject_name }}">{{ staff.subject_name }}{% if staff.professor_name %} (Prof. {{ staff.professor_name }}){% endif %}</option>
+                {% endfor %}
+            </select>
+            {% include '_session_inputs.html' %}
+            <button class="btn-custom mb-0" data-url="{{ url_for('run_attendance') }}" onclick="startScanner(this)">Start Attendance Scanner</button>
+        </div>
+    </div>
+
+    <!-- Attendance Viewer -->
+    <div class="col-lg-8">
+        <div class="glass-panel h-100">
+            <h2 class="h4 panel-title mb-3">Attendance Log</h2>
+            <form action="{{ url_for('admin_dashboard') }}" method="GET" class="row g-2 align-items-end mb-3">
+                <div class="col-sm-5">
+                    <label class="form-label text-secondary mb-1" for="logSubject">Subject</label>
+                    <select name="subject" id="logSubject" class="form-select bg-dark text-light border-secondary">
+                        <option value="{{ general_subject }}" {% if subject == general_subject %}selected{% endif %}>{{ general_subject }}</option>
+                        {% for staff in staffs %}
+                        <option value="{{ staff.subject_name }}" {% if subject == staff.subject_name %}selected{% endif %}>{{ staff.subject_name }}{% if staff.professor_name %} (Prof. {{ staff.professor_name }}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-4">
+                    <label class="form-label text-secondary mb-1" for="logDate">Date</label>
+                    <input type="date" id="logDate" class="form-control bg-dark text-light border-secondary" name="date" required value="{{ date }}">
+                </div>
+                <div class="col-sm-3">
+                    <button type="submit" class="btn btn-outline-primary w-100">View</button>
+                </div>
+            </form>
+
+            {% if open_to_all %}
+            <div class="alert alert-info py-2 small">
+                No students are assigned to {{ subject }} yet, so every student is listed.
+                <a href="{{ url_for('admin_subjects') }}" class="alert-link">Assign students</a>
+            </div>
+            {% endif %}
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <span class="badge bg-success">Present: {{ counts['Present'] }}</span>
+                <span class="badge bg-warning text-dark">Late: {{ counts['Late'] }}</span>
+                <span class="badge bg-danger">Absent: {{ counts['Absent'] }}</span>
+            </div>
+            {% with editable=True, action_url=url_for('admin_set_attendance') %}
+                {% include '_attendance_table.html' %}
+            {% endwith %}
+        </div>
+    </div>
+</div>
+
+<!-- Student Registration Photo Capture Latency Graph - shown while registering -->
+<div class="row g-4 mt-2" id="regGraphContainer" style="display: none;">
+    <div class="col-12">
+        <div class="glass-panel" style="background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(255, 255, 255, 0.15);">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+                <div>
+                    <h2 class="h4 mb-1 text-light">Student Registration Capture Latency</h2>
+                    <p class="small text-secondary mb-0">Measured per saved photo: face detection + descriptor time of that frame plus cropping and saving</p>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <span class="badge fs-6 py-2 px-3" style="background-color: #334155; border: 1px solid #475569;">Student: <strong id="regStudentName">--</strong></span>
+                    <span class="badge fs-6 py-2 px-3" style="background-color: #1e293b; border: 1px solid #475569;">Photos: <strong id="regPhotoCount">0 / {{ photos_target }}</strong></span>
+                    <span class="badge fs-6 py-2 px-3" style="background-color: #0f172a; border: 1px solid #64748b;">Avg: <strong id="regAvgLatency">--</strong> ms</span>
+                </div>
+            </div>
+            <div style="height: 240px; position: relative;">
+                <canvas id="regLatencyChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mt-2">
+    <div class="col-lg-7">
+        <div class="glass-panel h-100">
+            <h2 class="h4 panel-title mb-3">Recent Class Sessions</h2>
+            {% with show_subject=True %}{% include '_sessions_table.html' %}{% endwith %}
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="glass-panel h-100">
+            <h2 class="h4 panel-title mb-3">Recognition Accuracy</h2>
+            {% if evaluation and not evaluation.error and evaluation_row %}
+                <div class="section-label">At the threshold in use ({{ '%.2f'|format(threshold) }})</div>
+                <div class="display-6 fw-bold mb-2">{{ evaluation_row.accuracy|pct }}</div>
+                <p class="small text-secondary">
+                    False rejects {{ evaluation_row.frr|pct }} · False accepts {{ evaluation_row.far|pct }}<br>
+                    Measured {{ evaluation.evaluated_at|ts }} on {{ evaluation.dataset.faces_detected }} photos of {{ evaluation.dataset.students }} student(s).
+                </p>
+            {% elif evaluation and evaluation.error %}
+                <p class="text-warning">Last evaluation ({{ evaluation.evaluated_at|ts }}): {{ evaluation.error }}</p>
+            {% else %}
+                <p class="text-secondary">Not measured yet. Register students, then run an evaluation to see the real accuracy of this system.</p>
+            {% endif %}
+            <a href="{{ url_for('admin_accuracy') }}" class="btn btn-outline-info btn-sm">Details &amp; run evaluation</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const REG_LATENCY_URL = {{ url_for('api_registration_latency')|tojson }};
+    let regLatencyChart = null;
+
+    function initRegChart() {
+        if (regLatencyChart || typeof Chart === 'undefined') return;
+        const ctx = document.getElementById('regLatencyChart').getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
+        gradient.addColorStop(1, 'rgba(15, 23, 42, 0.70)');
+        regLatencyChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Capture Latency (ms)',
+                    data: [],
+                    borderColor: '#ffffff',
+                    backgroundColor: gradient,
+                    fill: true,
+                    tension: 0.3,
+                    borderWidth: 2,
+                    pointBackgroundColor: '#ffffff',
+                    pointBorderColor: '#000000',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: (context) => ` Capture latency: ${context.raw} ms` } }
+                },
+                scales: {
+                    x: { grid: { color: 'rgba(255, 255, 255, 0.08)' }, ticks: { color: '#cbd5e1' } },
+                    y: { grid: { color: 'rgba(255, 255, 255, 0.08)' }, ticks: { color: '#cbd5e1' },
+                         title: { display: true, text: 'Time (ms)', color: '#94a3b8' } }
+                }
+            }
+        });
+    }
+
+    async function updateRegistrationLatencyMetrics() {
+        try {
+            const res = await fetch(REG_LATENCY_URL, {headers: {'Accept': 'application/json'}});
+            const data = await res.json();
+            const container = document.getElementById('regGraphContainer');
+            if (data && data.registered === true && Array.isArray(data.latencies) && data.latencies.length > 0) {
+                container.style.display = 'flex';
+                initRegChart();
+                if (regLatencyChart) {
+                    regLatencyChart.data.labels = data.latencies.map((_, idx) => `Photo ${idx + 1}`);
+                    regLatencyChart.data.datasets[0].data = data.latencies;
+                    regLatencyChart.update('none');
+                }
+                document.getElementById('regStudentName').textContent = data.student_folder || 'Student';
+                document.getElementById('regPhotoCount').textContent = `${data.photos_count} / ${data.photos_target}`;
+                document.getElementById('regAvgLatency').textContent = data.avg_latency ?? '--';
+            } else {
+                container.style.display = 'none';
+            }
+        } catch (err) {
+            console.log('Registration latency sync error:', err);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        updateRegistrationLatencyMetrics();
+        setInterval(updateRegistrationLatencyMetrics, 1500);
+    });
+</script>
+{% endblock %}

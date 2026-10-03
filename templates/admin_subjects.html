@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+{% block title %}Subjects - Face Recognition Attendance{% endblock %}
+{% block content %}
+<div class="mb-4">
+    <h1 class="display-6 page-title mb-1">Subjects &amp; Staff</h1>
+    <p class="text-secondary mb-0">Each subject has its own staff login. Assign students so only they are expected in that subject.</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="glass-panel" id="staff_panel">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h5 panel-title mb-0" id="staff_form_title">Add Subject</h2>
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="resetStaffForm()">+ Add New</button>
+            </div>
+            <form action="{{ url_for('manage_staff') }}" method="POST" class="row g-3" id="staff_form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="add" id="staff_action">
+                <div class="col-12">
+                    <label class="form-label text-secondary mb-1" for="staff_subject_input">Subject Name (staff username)</label>
+                    <input type="text" id="staff_subject_input" name="subject_name" class="form-control bg-dark text-light border-secondary" placeholder="e.g. Maths" maxlength="60" required>
+                </div>
+                <div class="col-12">
+                    <label class="form-label text-secondary mb-1" for="staff_prof_input">Professor Name</label>
+                    <input type="text" id="staff_prof_input" name="professor_name" class="form-control bg-dark text-light border-secondary" placeholder="Professor Name" maxlength="100">
+                </div>
+                <div class="col-12">
+                    <label class="form-label text-secondary mb-1" for="staff_password_input">Password</label>
+                    <input type="password" id="staff_password_input" name="password" class="form-control bg-dark text-light border-secondary" placeholder="At least {{ min_password }} characters" minlength="{{ min_password }}" autocomplete="new-password" required>
+                </div>
+                <div class="col-12 d-flex gap-2">
+                    <button type="submit" id="staff_save_btn" class="btn btn-success w-50">Save Subject</button>
+                    <button type="button" onclick="resetStaffForm()" class="btn btn-outline-secondary w-50">Clear / Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="glass-panel">
+            <h2 class="h5 panel-title mb-3">All Subjects ({{ staffs|length }})</h2>
+            <div class="table-responsive">
+                <table class="table table-hover table-borderless align-middle mb-0">
+                    <thead class="border-bottom border-secondary">
+                        <tr>
+                            <th>Subject</th>
+                            <th>Professor</th>
+                            <th>Students</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for staff in staffs %}
+                        {% set assigned = enrollment.get(staff.subject_name, [])|length %}
+                        <tr>
+                            <td>{{ staff.subject_name }}</td>
+                            <td>{{ staff.professor_name if staff.professor_name else '—' }}</td>
+                            <td>
+                                {% if assigned %}<span class="badge bg-info text-dark">{{ assigned }} / {{ student_count }} assigned</span>
+                                {% else %}<span class="badge bg-secondary">All students</span>{% endif %}
+                            </td>
+                            <td class="text-end text-nowrap">
+                                <button type="button" class="btn btn-sm btn-outline-info me-1" data-subject="{{ staff.subject_name }}" onclick="openEnroll(this)">Assign Students</button>
+                                <button type="button" class="btn btn-sm btn-outline-warning me-1"
+                                        data-subject="{{ staff.subject_name }}"
+                                        data-prof="{{ staff.professor_name if staff.professor_name else '' }}"
+                                        onclick="editStaff(this)">Edit</button>
+                                <form action="{{ url_for('manage_staff') }}" method="POST" class="d-inline"
+                                      data-subject="{{ staff.subject_name }}" data-records="{{ record_counts.get(staff.subject_name, 0) }}"
+                                      onsubmit="return confirm('Delete subject ' + this.dataset.subject + '? Its staff login, student assignments and ' + this.dataset.records + ' attendance record(s) are deleted too.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="subject_name" value="{{ staff.subject_name }}">
+                                    <input type="hidden" name="action" value="delete">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-secondary py-4">No subjects yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assign students modal -->
+<div class="modal fade" id="enrollModal" tabindex="-1" aria-labelledby="enrollModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <form class="modal-content bg-dark text-light border-secondary" method="POST" action="{{ url_for('update_enrollment') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="subject_name" id="enrollSubject">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="enrollModalLabel">Assign students: <span id="enrollTitle"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-secondary">Only ticked students are expected in this subject. Leave everyone unticked to expect all students.</p>
+                <input type="search" id="enrollSearch" class="form-control form-control-sm bg-dark text-light border-secondary mb-2" placeholder="Search students..."
+                       oninput="filterRows(this, '#enrollList .form-check')">
+                <div class="d-flex gap-2 align-items-center mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="setAllEnroll(true)">Select all</button>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="setAllEnroll(false)">Select none</button>
+                    <span class="ms-auto small text-secondary" id="enrollCount"></span>
+                </div>
+                <div id="enrollList"></div>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-success">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script type="application/json" id="enrollData">{{ enroll_data|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const ENROLL = JSON.parse(document.getElementById('enrollData').textContent);
+
+    function updateEnrollCount() {
+        const boxes = document.querySelectorAll('#enrollList input[type=checkbox]');
+        const ticked = [...boxes].filter(b => b.checked).length;
+        document.getElementById('enrollCount').textContent = ticked ? `${ticked} of ${boxes.length} selected` : 'None selected (all students expected)';
+    }
+
+    function setAllEnroll(checked) {
+        document.querySelectorAll('#enrollList .form-check').forEach(wrap => {
+            if (wrap.style.display !== 'none') wrap.querySelector('input').checked = checked;
+        });
+        updateEnrollCount();
+    }
+
+    function openEnroll(btn) {
+        const subject = btn.dataset.subject;
+        document.getElementById('enrollSubject').value = subject;
+        document.getElementById('enrollTitle').textContent = subject;
+        document.getElementById('enrollSearch').value = '';
+        const assigned = new Set(ENROLL.enrollment[subject] || []);
+        const list = document.getElementById('enrollList');
+        list.replaceChildren();
+        ENROLL.students.forEach(([reg, name], i) => {
+            const wrap = document.createElement('div');
+            wrap.className = 'form-check';
+            wrap.dataset.search = `${reg} ${name}`.toLowerCase();
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.className = 'form-check-input';
+            input.name = 'register_numbers';
+            input.value = reg;
+            input.id = `enroll_${i}`;
+            input.checked = assigned.has(reg);
+            input.addEventListener('change', updateEnrollCount);
+            const label = document.createElement('label');
+            label.className = 'form-check-label';
+            label.htmlFor = input.id;
+            label.textContent = `${reg} - ${name}`;
+            wrap.append(input, label);
+            list.append(wrap);
+        });
+        if (!ENROLL.students.length) list.textContent = 'No students yet - add them on the Students page.';
+        updateEnrollCount();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('enrollModal')).show();
+    }
+
+    function editStaff(btn) {
+        document.getElementById('staff_action').value = 'edit';
+        const subjectInput = document.getElementById('staff_subject_input');
+        subjectInput.value = btn.dataset.subject;
+        subjectInput.readOnly = true;
+        document.getElementById('staff_prof_input').value = btn.dataset.prof;
+        const password = document.getElementById('staff_password_input');
+        password.value = '';
+        password.required = false;
+        password.placeholder = 'Leave blank to keep the current password';
+        setEditTitle('staff_form_title', 'Edit Subject ', btn.dataset.subject);
+        document.getElementById('staff_save_btn').textContent = 'Update Subject';
+        document.getElementById('staff_panel').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function resetStaffForm() {
+        document.getElementById('staff_action').value = 'add';
+        const subjectInput = document.getElementById('staff_subject_input');
+        subjectInput.value = '';
+        subjectInput.readOnly = false;
+        document.getElementById('staff_prof_input').value = '';
+        const password = document.getElementById('staff_password_input');
+        password.value = '';
+        password.required = true;
+        password.placeholder = 'At least {{ min_password }} characters';
+        document.getElementById('staff_form_title').textContent = 'Add Subject';
+        document.getElementById('staff_save_btn').textContent = 'Save Subject';
+    }
+</script>
+{% endblock %}

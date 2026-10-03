@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import percent_badge %}
+{% block title %}Reports - Face Recognition Attendance{% endblock %}
+{% block content %}
+{% set show_subject = subject_options is not none and subject == 'ALL' %}
+{% set percents = rows|selectattr('percent', 'ne', none)|map(attribute='percent')|list %}
+{% set average = (percents|sum / percents|length) if percents else none %}
+{% set low_rows = rows|selectattr('low')|list %}
+
+<div class="mb-4">
+    <h1 class="display-6 page-title mb-1">Attendance Reports</h1>
+    <p class="text-secondary mb-0">
+        {% if subject_options is none %}{{ subject }}: attendance{% else %}Attendance{% endif %} percentage per student.
+        Below {{ low_percent }}% is highlighted in red.
+    </p>
+</div>
+
+<div class="glass-panel mb-4">
+    <form method="GET" action="{{ url_for(endpoint) }}" class="row g-2 align-items-end">
+        {% if subject_options is not none %}
+        <div class="col-md-4">
+            <label class="form-label text-secondary mb-1" for="reportSubject">Subject</label>
+            <select name="subject" id="reportSubject" class="form-select bg-dark text-light border-secondary">
+                <option value="ALL" {% if subject == 'ALL' %}selected{% endif %}>All subjects</option>
+                {% if subject != 'ALL' and subject not in subject_options %}
+                <option value="{{ subject }}" selected>{{ subject }}</option>
+                {% endif %}
+                {% for name in subject_options %}
+                <option value="{{ name }}" {% if subject == name %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+        <div class="col-md-3">
+            <label class="form-label text-secondary mb-1" for="reportStart">From</label>
+            <input type="date" name="start" id="reportStart" value="{{ start }}" class="form-control bg-dark text-light border-secondary">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label text-secondary mb-1" for="reportEnd">To</label>
+            <input type="date" name="end" id="reportEnd" value="{{ end }}" class="form-control bg-dark text-light border-secondary">
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-outline-primary w-100">View</button>
+            <a href="{{ url_for(endpoint) }}" class="btn btn-outline-secondary">Reset</a>
+        </div>
+    </form>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="section-label">{{ 'Student / subject rows' if show_subject else 'Students' }}</div>
+            <div class="value">{{ rows|length }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="section-label">Average attendance</div>
+            <div class="value">{{ average|pct }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="section-label">Below {{ low_percent }}%</div>
+            <div class="value {{ 'text-danger' if low_rows else 'text-success' }}">{{ low_rows|length }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="glass-panel">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h2 class="h5 panel-title mb-0">Summary</h2>
+        <div class="d-flex gap-2">
+            <a class="btn btn-sm btn-success" href="{{ url_for('export', fmt='xlsx', **export) }}">Export Excel</a>
+            <a class="btn btn-sm btn-danger" href="{{ url_for('export', fmt='pdf', **export) }}">Export PDF</a>
+        </div>
+    </div>
+    <div class="table-responsive" style="max-height: 640px; overflow-y: auto;">
+        <table class="table table-hover table-borderless align-middle mb-0">
+            <thead class="border-bottom border-secondary">
+                <tr>
+                    <th>Register No</th>
+                    <th>Name</th>
+                    {% if show_subject %}<th>Subject</th>{% endif %}
+                    <th class="text-center">Held</th>
+                    <th class="text-center">Present</th>
+                    <th class="text-center">Late</th>
+                    <th class="text-center">Absent</th>
+                    <th class="text-end">Attendance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr class="{{ 'row-low' if r.low }}">
+                    <td>{{ r.register_number }}</td>
+                    <td>{{ r.name }}</td>
+                    {% if show_subject %}<td>{{ r.subject }}</td>{% endif %}
+                    <td class="text-center">{{ r.held }}</td>
+                    <td class="text-center">{{ r.present }}</td>
+                    <td class="text-center">{{ r.late }}</td>
+                    <td class="text-center">{{ r.absent }}</td>
+                    <td class="text-end">{{ percent_badge(r.percent, r.low) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="text-center text-secondary py-4">No students or attendance records for these filters.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="small text-secondary mt-3 mb-0">
+        A class counts as held on a day when at least one student was marked Present or Late for that subject.
+        Late counts as attended. Exports also include every class day per student.
+    </p>
+</div>
+{% endblock %}

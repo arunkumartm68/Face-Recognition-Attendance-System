@@ -1,0 +1,12 @@
+{% macro status_badge(status) -%}
+{%- if status == 'Present' -%}<span class="badge bg-success">Present</span>
+{%- elif status == 'Late' -%}<span class="badge bg-warning text-dark">Late</span>
+{%- else -%}<span class="badge bg-danger">Absent</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro percent_badge(value, low) -%}
+{%- if value is none -%}<span class="text-secondary">—</span>
+{%- else -%}<span class="badge {{ 'bg-danger' if low else 'bg-success' }} fs-6">{{ '%.1f'|format(value) }}%</span>
+{%- endif -%}
+{%- endmacro %}

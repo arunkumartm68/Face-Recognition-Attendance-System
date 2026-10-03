@@ -1,0 +1,34 @@
+{# Expects: sessions, show_subject #}
+<div class="table-responsive scroll-table">
+    <table class="table table-hover table-borderless align-middle mb-0 small">
+        <thead class="border-bottom border-secondary">
+            <tr>
+                {% if show_subject %}<th>Subject</th>{% endif %}
+                <th>Started</th>
+                <th>Ended</th>
+                <th>Class length</th>
+                <th>Late after</th>
+                <th>Marked that day</th>
+                <th>Started by</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in sessions %}
+            <tr>
+                {% if show_subject %}<td>{{ s.subject }}</td>{% endif %}
+                <td>{{ s.started_at|ts }}</td>
+                <td>{{ s.ended_at|ts if s.ended_at else 'Running / not closed' }}</td>
+                <td>{{ '%g min'|format(s.duration_min) if s.duration_min else 'No limit' }}</td>
+                <td>{{ '%g min'|format(s.late_after_min) if s.late_after_min else 'Off' }}</td>
+                <td>
+                    <span class="badge bg-success">{{ s.present_count }} present</span>
+                    <span class="badge bg-warning text-dark">{{ s.late_count }} late</span>
+                </td>
+                <td>{{ s.started_by or '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-center text-secondary py-3">No scanner sessions yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
