@@ -4,7 +4,7 @@ A webcam attendance system for colleges and classrooms. Students register their 
 
 Face recognition uses [dlib](http://dlib.net/)'s ResNet model (128-dimensional face descriptors); the web app is built with Flask, SQLite and Bootstrap 5.
 
-![Admin dashboard](docs/screenshots/admin_dashboard.png)
+
 
 ## Features
 
@@ -97,15 +97,7 @@ python app.py                    # then open http://127.0.0.1:5000
 
 **Attendance rules:** one record per student, subject and day. A class counts as held on a day when at least one student was marked Present or Late. Late counts as attended.
 
-## Screenshots
 
-*(sample data)*
-
-| Reports | Student dashboard |
-|---|---|
-| ![Reports](docs/screenshots/reports.png) | ![Student dashboard](docs/screenshots/student_dashboard.png) |
-
-![Accuracy page](docs/screenshots/accuracy.png)
 
 ## Command-line tools
 
